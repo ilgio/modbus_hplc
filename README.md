@@ -1,5 +1,5 @@
-# modbus_hplc
-Home Assistant - modbus for HomePLC
+# Home Assistant - modbus for HomePLC
+
 
 Custom component for HomePLC
 
