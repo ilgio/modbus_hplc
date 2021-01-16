@@ -33,7 +33,7 @@ example switch:
 switch:
   platform: modbus
   registers:
-    #Register(400) In(4)
+    #Register(400) In(16)
     - name: Stanza 
       hub: RS485
       slave: 1
