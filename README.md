@@ -4,7 +4,10 @@ The ladder diagram could be all done with an input variable %MX400.0 and the phy
 Insert the stepper input variable (%MX400.1) in the register
 in state: insert the physical value of the relay (%QX0.0)
 
+Example of ladder diagram
+
 Custom component for HomePLC
+<img width="478" alt="example_ladder_image" src="https://github.com/user-attachments/assets/24566087-cabb-4036-b5c6-ba9f87814615" />
 
 connection by usb/rs485:
 ```
