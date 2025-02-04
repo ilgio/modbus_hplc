@@ -6,7 +6,7 @@ in state: insert the physical value of the relay (%QX0.0)
 
 Example of ladder diagram
 <img width="478" alt="example_ladder_image" src="https://github.com/user-attachments/assets/24566087-cabb-4036-b5c6-ba9f87814615" />
-(https://github.com/ilgio/modbus_hplc/edit/main/README.md#:~:text=example_ladder_hplc.fbd)
+[(https://github.com/ilgio/modbus_hplc/edit/main/README.md#:~:text=example_ladder_hplc.fbd)]
 
 Custom component for HomePLC
 
