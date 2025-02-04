@@ -1,7 +1,7 @@
 # Home Assistant - modbus for HomePLC
 
-The ladder diagram could be all done with an input variable %MX400.0 and the physical value of the relay in HomePLC as an output.
-Insert the stepper input variable (%MX400.1) in the register
+Now very simple to use the HomePLC relays with the ladder diagram could be all done with an input variable %MX400.0 and in output the physical value of the relay in HomePLC.
+Insert in the register, the input variable of the stepper (%MX400.1)
 in state: insert the physical value of the relay (%QX0.0)
 
 Example of ladder diagram
