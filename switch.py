@@ -4,7 +4,7 @@ import logging
 from typing import Any, Dict, Optional
 import numpy as np 
 from time import sleep
-
+import re
 
 from pymodbus.exceptions import ConnectionException, ModbusException
 from pymodbus.pdu import ExceptionResponse
@@ -35,6 +35,7 @@ from .const import (
     CONF_REGISTERS,
     CONF_STATE_OFF,
     CONF_STATE_ON,
+    CONF_STATE,
     CONF_VERIFY_REGISTER,
     CONF_VERIFY_STATE,
     DEFAULT_HUB,
@@ -46,17 +47,20 @@ _LOGGER = logging.getLogger(__name__)
 
 REGISTERS_SCHEMA = vol.Schema(
     {
-        vol.Required(CONF_COMMAND_OFF): vol.Any(cv.positive_int, vol.All(cv.ensure_list, [cv.positive_int])),
-        vol.Required(CONF_COMMAND_ON): vol.Any(cv.positive_int, vol.All(cv.ensure_list, [cv.positive_int])),
         vol.Required(CONF_NAME): cv.string,
-        vol.Required(CONF_REGISTER): cv.positive_int,
+        vol.Required(CONF_REGISTER): vol.Match(
+            r"^%[A-Z]+[0-9]+\.[0-9]+$",  # Accetta solo numeri con punto (es. "%MX401.5")
+            msg="Formato non valido di una variabile %MX! Usa il formato %MX400.3"
+        ),        
         vol.Optional(CONF_HUB, default=DEFAULT_HUB): cv.string,
         vol.Optional(CONF_REGISTER_TYPE, default=CALL_TYPE_REGISTER_HOLDING): vol.In(
             [CALL_TYPE_REGISTER_HOLDING, CALL_TYPE_REGISTER_INPUT]
         ),
         vol.Optional(CONF_SLAVE): cv.positive_int,
-        vol.Optional(CONF_STATE_OFF): vol.Any(cv.positive_int, vol.All(cv.ensure_list, [cv.positive_int])),
-        vol.Optional(CONF_STATE_ON): vol.Any(cv.positive_int, vol.All(cv.ensure_list, [cv.positive_int])),
+        vol.Required(CONF_STATE): vol.Match(
+            r"^%[A-Z]+[0-9]+\.[0-9]+$",  # Accetta solo numeri con punto (es. "%QX4.7")
+            msg="Formato non valido di una variabile %MX o %QX! Usa il formato %QX4.3"
+        ),
         vol.Optional(CONF_VERIFY_REGISTER): cv.positive_int,
         vol.Optional(CONF_VERIFY_STATE, default=True): cv.boolean,
     }
@@ -168,9 +172,6 @@ class ModbusCoilSwitch(ModbusBaseSwitch, SwitchEntity):
             return False
 
         self._available = True
-        # bits[0] select the lowest bit in result,
-        # is_on for a binary_sensor is true if the bit is 1
-        # The other bits are not considered.
         return bool(result.bits[0] & 1)
 
     def _write_coil(self, coil, value):
@@ -190,11 +191,36 @@ class ModbusRegisterSwitch(ModbusBaseSwitch, SwitchEntity):
     def __init__(self, hub: ModbusHub, config: Dict[str, Any]):
         """Initialize the register switch."""
         super().__init__(hub, config)
-        self._register = config[CONF_REGISTER]
-        self._command_on = config[CONF_COMMAND_ON]
-        self._command_off = config[CONF_COMMAND_OFF]
-        self._state_on = config.get(CONF_STATE_ON, self._command_on)
-        self._state_off = config.get(CONF_STATE_OFF, self._command_off)
+        match = re.match(r"^(%[A-Z]+)(\d+)\.(\d+)$", str(config[CONF_REGISTER]))
+
+        if not match:
+            raise ValueError(f"Formato errato per register: {config[CONF_REGISTER]}. Deve essere nel formato '%MX401.5'.")
+
+        self._register_type = match.group(1)
+
+        self._register = int(match.group(2))-1  
+        self._bit_position = int(match.group(3))+1  
+
+        match = re.match(r"^(%[A-Z]+)(\d+)\.(\d+)$", str(config[CONF_STATE]))
+        if not match:
+            raise ValueError(f"Formato errato per register: {config[CONF_STATE]}. Deve essere nel formato '%QX4.5'.")
+
+        self._register_read_type = match.group(1)
+        self._register_read = int(match.group(2))  
+        
+        if self._register_read_type == "%QX":
+            self._register_read = self._register_read + 200
+        else:
+            self._register_read = self._register_read
+        
+        self._bit_read = int(match.group(3)) 
+        self._bit_read = self._bit_read +1
+        
+        self._command_on = [self._bit_position]
+        self._command_off = [self._bit_position]
+        
+        self._state_on = [self._register_read,self._bit_read,self._bit_read]
+        self._state_off = [self._register_read,self._bit_read,0]
         self._verify_state = config[CONF_VERIFY_STATE]
         self._verify_register = config.get(CONF_VERIFY_REGISTER, self._register)
         self._register_type = config[CONF_REGISTER_TYPE]
@@ -203,13 +229,13 @@ class ModbusRegisterSwitch(ModbusBaseSwitch, SwitchEntity):
 
     def turn_on(self, **kwargs):
         """Set switch on."""
-
+        # _LOGGER.error("TURN_ON: Register value YAMML: %s", self._register)  # Log per debug
         # Only holding register is writable
         if self._register_type == CALL_TYPE_REGISTER_HOLDING:
             self._write_register(self._command_on)
             if not self._verify_state:
                 self._is_on = True
-        sleep(2)        
+        sleep(1)        
         self.update()
 
     def turn_off(self, **kwargs):
@@ -220,7 +246,7 @@ class ModbusRegisterSwitch(ModbusBaseSwitch, SwitchEntity):
             self._write_register(self._command_off)
             if not self._verify_state:
                 self._is_on = False
-        sleep(2)        
+        sleep(1)        
         self.update()
 
     @property
@@ -230,23 +256,27 @@ class ModbusRegisterSwitch(ModbusBaseSwitch, SwitchEntity):
 
     def update(self):
         """Update the state of the switch."""
+        # _LOGGER.error("TURN_ON: Register value update YAMML: %s", self._register)  # Log per debug
         if not self._verify_state:
             return
 
         #sleep(2)
         
         register_value = self._zzz_read_register(CALL_TYPE_REGISTER_HOLDING,self._state_on[0])
-        _LOGGER.error("REGISTER VALUE %s",register_value)
+        # _LOGGER.error("REGISTER VALUE %s",register_value)
         
-
         value = np.bitwise_and(register_value, int(pow(2,self._state_on[1]-1)))
 
         #value = ((register_value>> self._state_on[1]) & 1)
-        _LOGGER.error("BITWISE VALUE %s",value)
-        _LOGGER.error("BITT %s",self._state_on[1])
-        _LOGGER.error("ACCESO %s",self._state_on[2])
+        # _LOGGER.error("BITWISE VALUE %s",value)
+        # _LOGGER.error("BITT %s",self._state_on[1])
+        # _LOGGER.error("ACCESO %s",self._state_on[2])
 
-
+        # _LOGGER.error("LLLL -> REGISTER: %s", self._register)
+        # _LOGGER.error("LLLL -> BIT: %s", self._bit_position)
+        # _LOGGER.error("LLLL -> COMMAND_ON: %s", self._command_on)
+        # _LOGGER.error("LLLL -> COMMAND_OFF: %s", self._command_off)
+        
         if value == int(pow(2,self._state_on[2]-1)):
             self._is_on = True
         elif value == int(pow(2,self._state_off[2]-1)):
@@ -260,20 +290,6 @@ class ModbusRegisterSwitch(ModbusBaseSwitch, SwitchEntity):
                 value,
             )
         
-        # value = self._read_register()
-        # if value == self._state_on:
-        #     self._is_on = True
-        # elif value == self._state_off:
-        #     self._is_on = False
-        # elif value is not None:
-        #     _LOGGER.error(
-        #         "Unexpected response from hub %s, slave %s register %s, got 0x%2x",
-        #         self._hub.name,
-        #         self._slave,
-        #         self._register,
-        #         value,
-        #     )
-
     def _zzz_read_register(self, register_type, register) -> Optional[float]:
         try:
             if register_type == CALL_TYPE_REGISTER_INPUT:
@@ -318,24 +334,18 @@ class ModbusRegisterSwitch(ModbusBaseSwitch, SwitchEntity):
 
         return int(result.registers[0])
 
-    # def _write_register(self, value):
-        # """Write holding register using the Modbus hub slave."""
-        # try:
-            # self._hub.write_registers(self._slave, self._register, value)
-        # except ConnectionException:
-            # self._available = False
-            # return
-
-        # self._available = True
-
 
     def _write_register(self, value):
         """Write holding register using the Modbus hub slave."""
+        # _LOGGER.error("TURN_ON: Register value nel write  YAMML: %s", self._register)  # Log per debug
         try:
             if isinstance(value, list):
-                _LOGGER.error("REGISTERRRRRRRRRR %s",value[0]-1)
+                # _LOGGER.error("REGISTERRRRRRRRRR %s",value[0]-1)
 
-                number = pow(2,value[0]-1)
+                if value[0] == 0:
+                    number = 0
+                else:
+                    number = pow(2,value[0]-1)
                 self._hub.write_registers(self._slave, self._register, number)
             else:          
                 self._hub.write_register(self._slave, self._register, value)                   

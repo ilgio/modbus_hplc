@@ -65,6 +65,7 @@ CONF_BIT = "bit"
 # switch.py
 CONF_STATE_OFF = "state_off"
 CONF_STATE_ON = "state_on"
+CONF_STATE = "state"
 CONF_VERIFY_REGISTER = "verify_register"
 CONF_VERIFY_STATE = "verify_state"
 

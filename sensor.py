@@ -262,7 +262,7 @@ class ModbusRegisterSensor(RestoreEntity):
             # Position is between 0 and len -1
             position = len(bytes_as_bits) - self._bit
             val = bytes_as_bits[position]
-            _LOGGER.error("Bit at position %s is: %s", self._bit, val)
+            #_LOGGER.error("Bit at position %s is: %s", self._bit, val)
             self._value = str(val)
 
         else:
